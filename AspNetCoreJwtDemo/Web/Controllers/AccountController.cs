@@ -15,6 +15,7 @@ using Web.Services;
 using Web.ConfigModels;
 using Microsoft.Extensions.Options;
 using System.Net.Mime;
+using System.Security.Claims;
 
 namespace Web.Controllers
 {
@@ -72,7 +73,22 @@ namespace Web.Controllers
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(string))]
         public async Task<string> GetProfile()
         {
-            return await Task<string>.FromResult("This is my profile");
+            return await Task.FromResult("This is my profile");
+        }
+
+        [HttpGet("status")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(string))]
+        public async Task<string> GetStatus()
+        {
+
+            var nameIdClaim = HttpContext.User.Claims.FirstOrDefault(x => x.Type == ClaimTypes.NameIdentifier);
+
+            if(nameIdClaim != null)
+            {
+                return await Task.FromResult("NameId claim: "+nameIdClaim.Value);
+            }
+
+            return await Task.FromResult("This is for free users");
         }
     }
 }

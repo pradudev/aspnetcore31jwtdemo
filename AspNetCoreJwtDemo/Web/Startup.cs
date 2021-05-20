@@ -3,6 +3,7 @@ using Iml.Web;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -13,10 +14,13 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Web.ConfigModels;
+using Web.ErrorModels;
+using Web.Helpers;
 using Web.Services;
 
 namespace Web
@@ -57,12 +61,14 @@ namespace Web
             })
             .AddJwtBearer(options =>
             {
-                options.SecurityTokenValidators.Clear();
+                // options.IncludeErrorDetails = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
-                    ValidateLifetime = true,
+                    ValidateIssuer = true,
+                    ValidIssuer = appUserAuthConfig.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = appUserAuthConfig.Audience,
+                    ValidateLifetime = false,
                     ValidateIssuerSigningKey = true,
                     ClockSkew = TimeSpan.Zero,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(appUserAuthConfig.JwtSecretKey))
@@ -135,6 +141,29 @@ namespace Web
 
             app.UseAuthentication();
             app.UseAuthorization();
+
+            app.Use(async (context, next) =>
+            {
+                var expClaim = context.User.Claims.FirstOrDefault(x => x.Type == "exp");
+
+                if (expClaim!=null)
+                {
+                    DateTime expDate = EpochTime.DateTime(Convert.ToInt64(Math.Truncate(Convert.ToDouble(expClaim.Value, CultureInfo.InvariantCulture))));
+
+                    if(expDate < DateTime.UtcNow)
+                    {
+                        var result = JsonHelper.ConvertToJson(new SimpleMessageResponseModel("AccessToken expired"));
+                        context.Response.ContentType = "application/json";
+                        context.Response.StatusCode = 401;
+                        await context.Response.WriteAsync(result);
+                    }
+
+                    Console.WriteLine($"Exp: {expClaim}");
+                    Console.WriteLine($"Exp: {expDate}");
+                }
+
+                await next.Invoke();
+            });
 
             app.UseEndpoints(endpoints =>
             {
