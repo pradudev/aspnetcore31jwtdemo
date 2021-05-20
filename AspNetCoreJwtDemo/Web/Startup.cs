@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using Web.ConfigModels;
 using Web.ErrorModels;
 using Web.Helpers;
+using Web.Middlewares;
 using Web.Services;
 
 namespace Web
@@ -142,28 +143,8 @@ namespace Web
             app.UseAuthentication();
             app.UseAuthorization();
 
-            app.Use(async (context, next) =>
-            {
-                var expClaim = context.User.Claims.FirstOrDefault(x => x.Type == "exp");
-
-                if (expClaim!=null)
-                {
-                    DateTime expDate = EpochTime.DateTime(Convert.ToInt64(Math.Truncate(Convert.ToDouble(expClaim.Value, CultureInfo.InvariantCulture))));
-
-                    if(expDate < DateTime.UtcNow)
-                    {
-                        var result = JsonHelper.ConvertToJson(new SimpleMessageResponseModel("AccessToken expired"));
-                        context.Response.ContentType = "application/json";
-                        context.Response.StatusCode = 401;
-                        await context.Response.WriteAsync(result);
-                    }
-
-                    Console.WriteLine($"Exp: {expClaim}");
-                    Console.WriteLine($"Exp: {expDate}");
-                }
-
-                await next.Invoke();
-            });
+            // Middleware to check the expiry of the token and return custom exception message
+            app.UseMiddleware<AccessTokenExpiryCheckMiddleware>();
 
             app.UseEndpoints(endpoints =>
             {
